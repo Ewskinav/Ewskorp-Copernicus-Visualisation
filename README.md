@@ -1,10 +1,8 @@
 # Ewskorp-Copernicus-Visualisation
 
 Command-line tool that **downloads Sentinel-2 satellite imagery** (public COGs via STAC) and builds an **animated GIF**: one frame per time step, played in order.
+**No paid API keys** = data comes from open Copernicus/Sentinel-2 archives.
 
-- **No HTTP server** — you run one Python file.
-- **No paid API keys** — data comes from open Copernicus/Sentinel-2 archives (catalog + files over HTTPS).
-- **Internet required** — the script queries a STAC API and reads cloud-optimized GeoTIFF bands.
 
 ## Layout
 
