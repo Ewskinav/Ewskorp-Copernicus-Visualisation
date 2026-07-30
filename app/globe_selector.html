@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Globe Area Selector</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.123.1/Build/Cesium/Cesium.js">
+    </script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.123.1/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+    <style>
+        html, body, #cesiumContainer {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #toolbar {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(20, 20, 40, 0.88);
+            padding: 8px 16px;
+            border-radius: 10px;
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        #toolbar button, #toolbar select {
+            font-size: 13px;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s ease;
+        }
+        #toolbar button {
+            background: #2d6a4f;
+            color: white;
+            font-weight: 600;
+        }
+        #toolbar button:hover { background: #40916c; transform: scale(1.03); }
+        #toolbar button:active { transform: scale(0.97); }
+        #toolbar button.active {
+            background: #e63946;
+            box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.5);
+        }
+        #toolbar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #toolbar .label {
+            color: #aabbcc;
+            font-size: 12px;
+            padding: 0 6px;
+        }
+        #infoBar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(20, 20, 40, 0.85);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 8px 18px;
+            color: #d0d8e0;
+            font-size: 13px;
+            text-align: center;
+            min-width: 280px;
+            pointer-events: none;
+        }
+        #infoBar .highlight {
+            color: #4ade80;
+            font-weight: 600;
+        }
+        .cesium-viewer .cesium-widget-credits {
+            display: none !important;
+        }
+        .cesium-viewer .cesium-viewer-toolbar {
+            display: none !important;
+        }
+        .cesium-viewer .cesium-viewer-bottom {
+            display: none !important;
+        }
+        .cesium-viewer .cesium-viewer-fullscreenContainer {
+            display: none !important;
+        }
+        .cesium-viewer .cesium-animationWidgetContainer {
+            display: none !important;
+        }
+        .cesium-viewer .cesium-timelineWidgetContainer {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+
+    <div id="toolbar">
+        <span class="label">🌍</span>
+        <button id="selectBtn">✏️ Select Area</button>
+        <button id="confirmBtn" disabled>✅ Confirm</button>
+        <button id="zoomCenterBtn">📍 Center Here</button>
+        <span class="label">|</span>
+        <button id="resetBtn">🔄 Reset View</button>
+    </div>
+
+    <div id="infoBar">
+        <span id="statusText">Navigate the globe, then click <span class="highlight">Select Area</span> to begin.</span>
+    </div>
+
+    <script>
+        // ─── Cesium Token ────────────────────────────────────────────
+        // Using default Ion token; you can replace with your own from https://ion.cesium.com
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0NjYzYjBhZi0yMzc5LTRlNzgtYjYyYy04YzdjMTc4MjA2YzYiLCJpZCI6MjU5LCJpYXQiOjE2NDUyMTYwOTF9.8wMyZLTB1Rr9EStK17Y4f-1R0e8iHR7BFk4mOqwl10Q';
+
+        // ─── Viewer ─────────────────────────────────────────────────
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            animation: false,
+            timeline: false,
+            fullscreenButton: false,
+            homeButton: false,
+            sceneModePicker: false,
+            baseLayerPicker: false,
+            navigationHelpButton: false,
+            infoBox: false,
+            geocoder: false,
+            selectionIndicator: false,
+            imageryProvider: Cesium.createWorldImagery({
+                style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS
+            }),
+            terrainProvider: Cesium.createWorldTerrain(),
+        });
+
+        // Enable high-res rendering
+        viewer.scene.globe.depthTestAgainstTerrain = true;
+        viewer.scene.highDynamicRange = false;
+        viewer.scene.globe.enableLighting = true;
+        viewer.scene.fog.enabled = false;
+        viewer.scene.skyAtmosphere.show = true;
+
+        // ─── State ──────────────────────────────────────────────────
+        let isSelecting = false;
+        let firstPoint = null;
+        let rectangleEntity = null;
+        let cornerPoints = [];
+        let isSubmitting = false;
+
+        const selectBtn = document.getElementById('selectBtn');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const statusText = document.getElementById('statusText');
+
+        // ─── Helpers ────────────────────────────────────────────────
+        function cartographicToDegrees(cartographic) {
+            return {
+                lon: Cesium.Math.toDegrees(cartographic.longitude),
+                lat: Cesium.Math.toDegrees(cartographic.latitude),
+                height: cartographic.height
+            };
+        }
+
+        function getPickPosition(movement) {
+            const cartesian = viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid);
+            if (!cartesian) return null;
+            const carto = Cesium.Cartographic.fromCartesian(cartesian);
+            return cartographicToDegrees(carto);
+        }
+
+        function clearRectangle() {
+            if (rectangleEntity) {
+                viewer.entities.remove(rectangleEntity);
+                rectangleEntity = null;
+            }
+            cornerPoints = [];
+            firstPoint = null;
+        }
+
+        function updateInfo(msg, isGood=false) {
+            statusText.innerHTML = msg;
+            if (isGood) {
+                statusText.style.color = '#4ade80';
+            } else {
+                statusText.style.color = '#d0d8e0';
+            }
+        }
+
+        // ─── Draw Rectangle ─────────────────────────────────────────
+        function drawRectangle(p1, p2) {
+            clearRectangle();
+
+            const lonMin = Math.min(p1.lon, p2.lon);
+            const lonMax = Math.max(p1.lon, p2.lon);
+            const latMin = Math.min(p1.lat, p2.lat);
+            const latMax = Math.max(p1.lat, p2.lat);
+
+            rectangleEntity = viewer.entities.add({
+                rectangle: {
+                    coordinates: Cesium.Rectangle.fromDegrees(lonMin, latMin, lonMax, latMax),
+                    material: new Cesium.ColorMaterialProperty(
+                        Cesium.Color.YELLOW.withAlpha(0.25)
+                    ),
+                    outline: true,
+                    outlineColor: Cesium.Color.GOLD,
+                    outlineWidth: 2,
+                }
+            });
+
+            return { lonMin, latMax, lonMax, latMin };
+        }
+
+        // ─── Mouse handlers ─────────────────────────────────────────
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+        handler.setInputAction(function(movement) {
+            if (!isSelecting) return;
+
+            const pos = getPickPosition(movement);
+            if (!pos) return;
+
+            if (!firstPoint) {
+                // First click – set first corner
+                firstPoint = pos;
+                cornerPoints = [pos];
+                updateInfo(`First corner: ${pos.lat.toFixed(4)}°, ${pos.lon.toFixed(4)}°. Now click the opposite corner.`);
+            } else {
+                // Second click – complete rectangle
+                const bbox = drawRectangle(firstPoint, pos);
+                cornerPoints.push(pos);
+                isSelecting = false;
+                selectBtn.textContent = '✏️ Select Area';
+                selectBtn.classList.remove('active');
+                confirmBtn.disabled = false;
+                updateInfo(
+                    `Selected: TL(${bbox.latMax.toFixed(4)}°, ${bbox.lonMin.toFixed(4)}°) → BR(${bbox.latMin.toFixed(4)}°, ${bbox.lonMax.toFixed(4)}°)`,
+                    true
+                );
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        // ─── Cancel selection on right click ────────────────────────
+        handler.setInputAction(function(movement) {
+            if (isSelecting && firstPoint) {
+                clearRectangle();
+                firstPoint = null;
+                cornerPoints = [];
+                updateInfo('Selection cancelled. Click Select Area to try again.');
+            }
+        }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+        // ─── Toolbar handlers ───────────────────────────────────────
+        selectBtn.addEventListener('click', function() {
+            isSelecting = !isSelecting;
+            if (isSelecting) {
+                clearRectangle();
+                firstPoint = null;
+                cornerPoints = [];
+                confirmBtn.disabled = true;
+                selectBtn.textContent = '✏️ Selecting…';
+                selectBtn.classList.add('active');
+                updateInfo('Click the <span class="highlight">first corner</span> of your area on the globe.');
+            } else {
+                selectBtn.textContent = '✏️ Select Area';
+                selectBtn.classList.remove('active');
+                updateInfo('Selection cancelled.');
+            }
+        });
+
+        confirmBtn.addEventListener('click', function() {
+            if (!rectangleEntity || isSubmitting) return;
+
+            const rect = rectangleEntity.rectangle.coordinates.getValue(Cesium.JulianDate.now());
+            if (!rect) return;
+
+            const west = Cesium.Math.toDegrees(rect.west);
+            const south = Cesium.Math.toDegrees(rect.south);
+            const east = Cesium.Math.toDegrees(rect.east);
+            const north = Cesium.Math.toDegrees(rect.north);
+
+            // Clamp to valid ranges
+            const result = {
+                top_left_lat: Math.min(90, Math.max(-90, north)),
+                top_left_lon: Math.max(-180, Math.min(180, west)),
+                bottom_right_lat: Math.min(90, Math.max(-90, south)),
+                bottom_right_lon: Math.max(-180, Math.min(180, east)),
+            };
+
+            isSubmitting = true;
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '⏳ Sending…';
+            updateInfo('Sending coordinates to the application…');
+
+            // POST coordinates to the local HTTP server
+            fetch('/api/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(result),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    updateInfo('✅ Coordinates confirmed! You can close this tab.', true);
+                    // Try to close the window/tab after a short delay
+                    setTimeout(() => window.close(), 1500);
+                } else {
+                    updateInfo('⚠️ Server error: ' + (data.message || 'unknown'));
+                    isSubmitting = false;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = '✅ Confirm';
+                }
+            })
+            .catch(err => {
+                updateInfo('⚠️ Connection error: ' + err.message + '. Tab will auto-close.');
+                // Still count it as submitted so the server can continue
+                setTimeout(() => window.close(), 2000);
+            });
+        });
+
+        zoomCenterBtn.addEventListener('click', function() {
+            if (rectangleEntity) {
+                viewer.zoomTo(rectangleEntity, new Cesium.HeadingPitchRange(0, -Math.PI/4, 500000));
+            } else {
+                updateInfo('First select an area, then center on it.');
+            }
+        });
+
+        resetBtn.addEventListener('click', function() {
+            clearRectangle();
+            isSelecting = false;
+            firstPoint = null;
+            cornerPoints = [];
+            selectBtn.textContent = '✏️ Select Area';
+            selectBtn.classList.remove('active');
+            confirmBtn.disabled = true;
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(0, 20, 25000000),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-30),
+                    roll: 0
+                },
+                duration: 1.5
+            });
+            updateInfo('View reset. Navigate the globe, then click Select Area.');
+        });
+
+        // Initial camera position centered on Europe
+        viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(0, 30, 20000000),
+            orientation: {
+                heading: Cesium.Math.toRadians(0),
+                pitch: Cesium.Math.toRadians(-30),
+                roll: 0
+            },
+            duration: 0
+        });
+
+        console.log('Cesium Globe Selector loaded. Use Select Area button to choose a region.');
+    </script>
+</body>
+</html>

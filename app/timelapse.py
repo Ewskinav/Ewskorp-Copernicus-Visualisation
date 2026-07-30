@@ -34,6 +34,7 @@ def generate_timelapse_gif(
     output_path: Path,
     fps: float = 0.2,
     boomerang: bool = True,
+    on_progress: object | None = None,
 ) -> Path:
     fetch_params = FetchParams(
         top_left_lat=params.top_left_lat,
@@ -48,7 +49,7 @@ def generate_timelapse_gif(
         height=params.height,
     )
 
-    frames = fetch_true_color_frames(fetch_params)
+    frames = fetch_true_color_frames(fetch_params, on_progress=on_progress)
     if not frames:
         raise NoImageryError("No imagery available for given parameters.")
 
@@ -58,13 +59,12 @@ def generate_timelapse_gif(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Pillow / imageio's GIF writer expects `duration` in milliseconds per frame, not seconds.
-    # Passing seconds (e.g. 5.0) is read as 5 ms — frames look almost instant.
+    # Pillow's GIF writer expects duration in milliseconds per frame
     frame_duration_ms = max(20, int(round(1000.0 / max(0.001, float(fps)))))
 
     images = [np.asarray(img.convert("RGBA")) for img in processed]
 
-    # Forward + reverse (omit duplicate junction frame) so the loop doesn't jump cut.
+    # Forward + reverse (omit duplicate junction frame) so the loop doesn't jump cut
     if boomerang and len(images) > 1:
         images = images + images[-2::-1]
 
@@ -76,4 +76,3 @@ def generate_timelapse_gif(
         loop=0,
     )
     return output_path
-
