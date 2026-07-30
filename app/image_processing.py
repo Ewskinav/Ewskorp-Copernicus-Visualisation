@@ -6,9 +6,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
 def normalize_frames(frames: list[tuple[datetime, Image.Image]]) -> list[tuple[datetime, Image.Image]]:
-    """
-    Ensures all frames are the same size (largest width/height among frames) using letterboxing.
-    """
+    """Make all frames the same size (largest width/height) using letterboxing."""
     if not frames:
         return []
 
@@ -33,7 +31,7 @@ def format_acquisition_label(t: datetime | date) -> str:
 
 
 def overlay_timestamp(img: Image.Image, t: datetime | date) -> Image.Image:
-    """Adds acquisition time (UTC) label bottom-left."""
+    """Add acquisition time (UTC) label bottom-left."""
     if img.mode != "RGBA":
         img = img.convert("RGBA")
 
@@ -43,13 +41,15 @@ def overlay_timestamp(img: Image.Image, t: datetime | date) -> Image.Image:
 
     font = ImageFont.load_default()
 
+    bar_height = 6
+    gap = 4
     padding = 8
     text_bbox = draw.textbbox((0, 0), label, font=font)
     text_w = text_bbox[2] - text_bbox[0]
     text_h = text_bbox[3] - text_bbox[1]
 
     x = padding
-    y = out.size[1] - text_h - padding
+    y = out.size[1] - bar_height - gap - text_h
 
     bg_margin = 6
     bg = (x - bg_margin, y - bg_margin, x + text_w + bg_margin, y + text_h + bg_margin)
@@ -58,6 +58,37 @@ def overlay_timestamp(img: Image.Image, t: datetime | date) -> Image.Image:
     return out
 
 
+def overlay_progress_bar(img: Image.Image, frame_index: int, total_frames: int) -> Image.Image:
+    """Add a slim progress bar at the bottom of the image showing current position."""
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+
+    out = img.copy()
+    draw = ImageDraw.Draw(out)
+    w, h = out.size
+
+    bar_height = 6
+    bar_y = h - bar_height
+
+    # Background track
+    draw.rectangle((0, bar_y, w, h), fill=(0, 0, 0, 180))
+
+    # Filled progress
+    if total_frames > 1:
+        filled_w = int(w * (frame_index + 1) / total_frames)
+    else:
+        filled_w = w
+    draw.rectangle((0, bar_y, filled_w, h), fill=(76, 175, 80, 220))
+
+    return out
+
+
 def process_frames(frames: list[tuple[datetime, Image.Image]]) -> list[Image.Image]:
     normalized = normalize_frames(frames)
-    return [overlay_timestamp(img, t) for t, img in normalized]
+    total = len(normalized)
+    result: list[Image.Image] = []
+    for i, (t, img) in enumerate(normalized):
+        img = overlay_timestamp(img, t)
+        img = overlay_progress_bar(img, i, total)
+        result.append(img)
+    return result
