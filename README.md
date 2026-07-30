@@ -5,6 +5,9 @@ Downloads Sentinel-2 satellite imagery (public COGs via STAC) and builds an anim
 - No HTTP server needed — just run one Python file.
 - No paid API keys — data comes from open Copernicus/Sentinel-2 archives.
 - Internet required — queries a STAC API and reads cloud-optimized GeoTIFF bands.
+Command-line tool that **downloads Sentinel-2 satellite imagery** (public COGs via STAC) and builds an **animated GIF**: one frame per time step, played in order.
+**No paid API keys** = data comes from open Copernicus/Sentinel-2 archives.
+
 
 ## Layout
 
