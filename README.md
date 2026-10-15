@@ -1,4 +1,4 @@
-# Ewskorp-Copernicus-Visualisation
+# Ewskcorp-Copernicus-Visualisation
 
 Downloads Sentinel-2 satellite imagery (public COGs via STAC) and builds an animated GIF.
 
@@ -42,12 +42,12 @@ A window opens where you:
 python make_timelapse.py -o out.gif --tl-lat 0 --tl-lon 0 --br-lat 0 --br-lon 05 --start 2024-04-01 --end 2024-06-01 --frames 10
 ```
 
-- **`--frames N`** — exactly N frames. The span from the start of `--start` (00:00 UTC) through the end of `--end` (end of that day, UTC) is split into N equal time positions. For each position we search the catalog for the closest-in-time Sentinel-2 scene. If nothing matches yet, the search expands (symmetric windows, then forward in hours/days) and may relax the cloud filter so you still get an image. The label on each frame is the scene's actual acquisition time (UTC).
-- **Fewer than N frames** — only if a target still has no usable scene after all search steps (rare). Increase `--max-cloud` or widen `--end` if that happens.
-- **`--max-cloud`** — preferred max scene cloud cover `0..1` (default `0.4`); relaxed automatically per target if needed.
-- **`--width` / `--height`** — output frame size in pixels (default 512×512 if omitted).
+- **`--frames N`** : exactly N frames. The span from the start of `--start` (00:00 UTC) through the end of `--end` (end of that day, UTC) is split into N equal time positions. For each position we search the catalog for the closest-in-time Sentinel-2 scene. If nothing matches yet, the search expands (symmetric windows, then forward in hours/days) and may relax the cloud filter so you still get an image. The label on each frame is the scene's actual acquisition time (UTC).
+- **Fewer than N frames** : only if a target still has no usable scene after all search steps (rare). Increase `--max-cloud` or widen `--end` if that happens.
+- **`--max-cloud`** : preferred max scene cloud cover `0..1` (default `0.4`); relaxed automatically per target if needed.
+- **`--width` / `--height`** : output frame size in pixels (default 512×512 if omitted).
 - **`--fps`** — frames per second (default 0.2 ≈ one frame every 5 seconds). Internally this is converted to GIF delay in milliseconds (Pillow expects ms, not seconds).
-- **Boomerang (default on)** — the GIF plays forward then backward so the loop doesn't jump from last frame back to first. Pass `--no-boomerang` for a plain forward-only sequence.
+- **Boomerang (default on)** : the GIF plays forward then backward so the loop doesn't jump from last frame back to first. Pass `--no-boomerang` for a plain forward-only sequence.
 
 Full options: `python make_timelapse.py --help`
 
